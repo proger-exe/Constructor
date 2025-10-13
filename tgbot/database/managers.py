@@ -152,26 +152,61 @@ class TenantManager:
 
 
 class TenantLocaleManager:
-    def __init__(self, locale_id: int):
-        self.locale_id = locale_id
-        self._cache: Optional["TenantLocale"] = None
+    """Helper for working with tenant locales."""
 
-    async def _ensure(self) -> "TenantLocale":
-        if self._cache is None:
-            self._cache = await TenantLocale.get(id=self.locale_id)
-        return self._cache
+    def __init__(self, tenant_id: int, lang: str = "ru"):
+        self.tenant_id = tenant_id
+        self.lang = lang
 
-    async def get_type(self) -> str:
-        locale = await self._ensure()
-        return locale.type
+    async def get(
+        self,
+        locale_type: str,
+        *,
+        default_name: str | None = None,
+        default_text: str | None = None,
+    ) -> "TenantLocale":
+        defaults = {
+            "name": default_name or locale_type,
+            "text": default_text or "",
+        }
+        locale, _ = await TenantLocale.get_or_create(
+            tenant_id=self.tenant_id,
+            type=locale_type,
+            lang=self.lang,
+            defaults=defaults,
+        )
+        return locale
 
-    async def get_label(self) -> str:
-        locale = await self._ensure()
-        return locale.name
-    
-    async def set_text(self, value) -> None:
-        locale = await self._ensure()
-        locale.text = value 
+    async def set_text(
+        self,
+        locale_type: str,
+        value: str,
+        *,
+        default_name: str | None = None,
+        default_text: str | None = None,
+    ) -> None:
+        locale = await self.get(
+            locale_type,
+            default_name=default_name,
+            default_text=default_text,
+        )
+        locale.text = value
+        await locale.save()
+
+    async def set_name(
+        self,
+        locale_type: str,
+        value: str,
+        *,
+        default_name: str | None = None,
+        default_text: str | None = None,
+    ) -> None:
+        locale = await self.get(
+            locale_type,
+            default_name=default_name,
+            default_text=default_text,
+        )
+        locale.name = value
         await locale.save()
 
     

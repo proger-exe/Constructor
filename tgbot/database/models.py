@@ -45,13 +45,23 @@ class TenantUser(Model):
 
 class TenantLocale(Model):
     id = fields.BigIntField(pk=True)
-    type = fields.CharField()
-    name = fields.CharField()
+    tenant = fields.ForeignKeyField(
+        "models.Tenant", related_name="locales", on_delete=fields.CASCADE
+    )
+    type = fields.CharField(max_length=255)
+    name = fields.CharField(max_length=255)
     text = fields.TextField()
-    lang = fields.CharField(default="ru")  # if don't need - delete it later.
+    lang = fields.CharField(default="ru", max_length=10)
 
     def __str__(self):
-        return f"Locale: [{self.type}] - {self.lang} / {self.text[:30]}..."
+        tenant = getattr(self, "tenant", None)
+        tenant_repr = getattr(tenant, "uuid", None) or getattr(tenant, "numeric_id", "-")
+        return (
+            "Locale: "
+            f"tenant={tenant_repr} "
+            f"[{self.type}] - {self.lang} / {self.text[:30]}..."
+        )
 
     class Meta:
         table = "tenant_locale"
+        unique_together = ("tenant", "type", "lang")
