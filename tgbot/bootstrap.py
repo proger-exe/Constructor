@@ -2,6 +2,7 @@ from typing import Tuple
 
 from tgbot.common.logging_setup import log, setup_logging
 from tgbot.config import AppSettings, RuntimeSecrets
+from tgbot.filters.tenant_admin import set_tenant_admin_ids
 from tgbot.services.tenants import TenantService
 from tgbot.services.vault import VaultClient
 
@@ -42,6 +43,7 @@ def load_settings() -> Tuple[AppSettings, RuntimeSecrets, VaultClient, TenantSer
         admin_ids = [int(x) for x in raw_admins]
 
     secrets.admin_ids = admin_ids
+    set_tenant_admin_ids(admin_ids)
 
     missing = []
     if app.env == "prod":
