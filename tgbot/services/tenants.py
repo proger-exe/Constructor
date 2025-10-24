@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Mapping, Optional
 
 from cachetools import TTLCache
 
@@ -12,6 +12,7 @@ class TenantContext:
     tenant_uid: str
     bot_token: str
     version: int
+    webhook_secret: Optional[str] = None
 
 
 class TenantService:
@@ -47,6 +48,7 @@ class TenantService:
             tenant_uid=tenant_uid,
             bot_token=token,
             version=data.get("version", 1),
+            webhook_secret=self._extract_secret(data),
         )
         self._cache[tenant_uid] = ctx
         return ctx
@@ -85,6 +87,7 @@ class TenantService:
                 tenant_uid=uid,
                 bot_token=token,
                 version=data.get("version", 1),
+                webhook_secret=self._extract_secret(data),
             )
             # Put into cache and result map
             self._cache[uid] = ctx
@@ -101,3 +104,13 @@ class TenantService:
     def invalidate(self, tenant_uid: str):
         """Remove a tenant context from the cache."""
         self._cache.pop(tenant_uid, None)
+
+    @staticmethod
+    def _extract_secret(data: Mapping[str, object]) -> Optional[str]:
+        """Return tenant-specific webhook secret if provided."""
+        # support multiple common keys to stay compatible with existing Vault data
+        for key in ("webhook_secret", "secret_token", "secret"):
+            value = data.get(key)
+            if value:
+                return value
+        return None
