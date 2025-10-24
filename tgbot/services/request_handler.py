@@ -46,11 +46,10 @@ class UUIDBasedRequestHandler(BaseRequestHandler):
         Validate Telegram 'X-Telegram-Bot-Api-Secret-Token' header.
         If no secret is configured, allow all (useful for dev).
         """
-        return (
-            True
-            if not self.secret_token
-            else _secrets.compare_digest(telegram_secret_token or "", self.secret_token)
-        )
+        expected_secret = getattr(bot, "_webhook_secret", None) or self.secret_token
+        if not expected_secret:
+            return True
+        return _secrets.compare_digest(telegram_secret_token or "", expected_secret)
 
     def register(self, app: Application, /, path: str, **kwargs: Any) -> None:
         """
@@ -109,6 +108,9 @@ class UUIDBasedRequestHandler(BaseRequestHandler):
                 default=DefaultBotProperties(parse_mode="HTML"),
             )
             self.bots[uid] = bot
+
+        # expose tenant-specific webhook secret for downstream verification
+        setattr(bot, "_webhook_secret", ctx.webhook_secret)
 
         log.info("tenant_resolved", extra={"tenant_uid": uid})
         return bot

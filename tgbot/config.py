@@ -44,4 +44,4 @@ class RuntimeSecrets(BaseModel):
     db_dsn: Optional[str] = None
     redis_dsn: Optional[str] = None
     main_bot_token: Optional[str] = None
-    admin_ids: Optional[list] = []
+    admin_ids: list[int] = Field(default_factory=list)

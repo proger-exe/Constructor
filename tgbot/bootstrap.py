@@ -1,4 +1,6 @@
-from typing import Tuple
+from typing import Dict, Tuple
+
+from hvac import exceptions as hvac_exceptions
 
 from tgbot.common.logging_setup import log, setup_logging
 from tgbot.config import AppSettings, RuntimeSecrets
@@ -10,6 +12,42 @@ KV_MAIN_BOT = "tgbot/main_bot"
 KV_WEBHOOK_SECRET = "tgbot/common/webhook_secret"
 KV_DB_DSN = "tgbot/common/db_dsn"
 KV_REDIS_DSN = "tgbot/common/redis_dsn"
+
+
+def _read_secret(
+    vault: VaultClient,
+    path: str,
+    *,
+    optional: bool = False,
+    env: str,
+    fallbacks: Tuple[str, ...] | None = None,
+) -> Dict:
+    """Read a secret from Vault and provide graceful fallbacks in non-prod envs."""
+
+    try:
+        return vault.read_kv(path)
+    except hvac_exceptions.InvalidPath:
+        if fallbacks:
+            for alt in fallbacks:
+                try:
+                    data = vault.read_kv(alt)
+                except hvac_exceptions.InvalidPath:
+                    continue
+                else:
+                    log.info(
+                        "vault_path_fallback_used",
+                        extra={"primary": path, "fallback": alt},
+                    )
+                    return data
+        log.warning("vault_path_missing", extra={"path": path})
+        if optional or env != "prod":
+            return {}
+        raise
+    except hvac_exceptions.VaultError:
+        log.exception("vault_read_failed", extra={"path": path})
+        if env != "prod":
+            return {}
+        raise
 
 
 def load_settings() -> Tuple[AppSettings, RuntimeSecrets, VaultClient, TenantService]:
@@ -27,12 +65,25 @@ def load_settings() -> Tuple[AppSettings, RuntimeSecrets, VaultClient, TenantSer
     )
 
     # global/common secrets
-    secrets.webhook_secret = vault.read_kv(KV_WEBHOOK_SECRET).get("webhook_secret")
-    secrets.db_dsn = vault.read_kv(KV_DB_DSN).get("db_dsn")
-    secrets.redis_dsn = vault.read_kv(KV_REDIS_DSN).get("redis_dsn")
+    webhook_secret = _read_secret(vault, KV_WEBHOOK_SECRET, env=app.env)
+    secrets.webhook_secret = webhook_secret.get("webhook_secret")
+
+    db_secret = _read_secret(vault, KV_DB_DSN, env=app.env, optional=True)
+    secrets.db_dsn = db_secret.get("db_dsn")
+
+    redis_secret = _read_secret(
+        vault, KV_REDIS_DSN, env=app.env, optional=not app.use_redis
+    )
+    secrets.redis_dsn = redis_secret.get("redis_dsn")
 
     # main bot
-    main = vault.read_kv(KV_MAIN_BOT)
+    main = _read_secret(
+        vault,
+        KV_MAIN_BOT,
+        env=app.env,
+        optional=True,
+        fallbacks=("tgbot/main",),
+    )
     secrets.main_bot_token = main.get("bot_token")
 
     raw_admins = main.get("admin_ids", [])
