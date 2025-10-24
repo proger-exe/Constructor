@@ -12,8 +12,10 @@ from aiohttp.web_app import Application
 from tgbot.bootstrap import load_settings
 from tgbot.common.logging_setup import log
 from tgbot.config import RuntimeSecrets
+from tgbot.database import close_db, start_db
 from tgbot.filters.admin import AdminFilter
 from tgbot.handlers import (
+    admin_router,
     user_router,
     tenant_admin_router,
     user_tenant_router,
@@ -27,11 +29,13 @@ def register_all_handlers(dp: Dispatcher, secrets: RuntimeSecrets):
     dp.update.middleware(ContextLoggingMiddleware())
 
     # Фильтры
-    tenant_admin_router.message.filter(AdminFilter(secrets.admin_ids))
-    tenant_admin_router.callback_query.filter(AdminFilter(secrets.admin_ids))
+    admin_filter = AdminFilter(secrets.admin_ids or [])
+    admin_router.message.filter(admin_filter)
+    admin_router.callback_query.filter(admin_filter)
 
     dp.include_routers(
-        user_router
+        user_router,
+        admin_router,
     )
 
 
@@ -50,8 +54,10 @@ async def create_app() -> Application:
     app, secrets, _vault, tenant_service = load_settings()
 
     # DB init
-    # if secrets.db_dsn:
-    #     await init_engine(secrets.db_dsn)
+    if secrets.db_dsn:
+        await start_db(secrets.db_dsn)
+    else:
+        log.warning("db_dsn_missing")
 
     webapp = web.Application()
     webapp["settings"] = app
@@ -124,6 +130,8 @@ async def create_app() -> Application:
         await main_bot.session.close()
         for dp_bot in tenant_handler.bots.values():
             await dp_bot.session.close()
+        with contextlib.suppress(Exception):
+            await close_db()
 
     webapp.on_startup.append(on_startup)
     webapp.on_cleanup.append(on_cleanup)
