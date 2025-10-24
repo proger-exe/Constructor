@@ -14,6 +14,13 @@ class TenantLocaleAction(CallbackData, prefix="tlc"):
     key: str
 
 
+class TenantAdminAction(CallbackData, prefix="tadm"):
+    action: str
+
+
+CHECK_SUBSCRIPTION_CALLBACK = "tenant_check_subscription"
+
+
 def main_keyboard(locales: Mapping[str, object]):
     markup = InlineKeyboardBuilder()
 
@@ -28,7 +35,7 @@ def main_keyboard(locales: Mapping[str, object]):
     return markup.as_markup()
 
 
-def tenant_locale_admin_keyboard(locales: Mapping[str, object]):
+def tenant_locale_admin_keyboard(locales: Mapping[str, object], *, subscription_enabled: bool):
     markup = InlineKeyboardBuilder()
 
     start_locale = locales.get(START_MESSAGE_KEY)
@@ -52,6 +59,27 @@ def tenant_locale_admin_keyboard(locales: Mapping[str, object]):
             callback_data=TenantLocaleAction(action="text", key=key).pack(),
         )
 
+    markup.adjust(1)
+    status = "включена" if subscription_enabled else "отключена"
+    markup.button(
+        text=f"🔗 Подписка: {status}",
+        callback_data=TenantAdminAction(action="subscription").pack(),
+    )
+    markup.button(
+        text="📢 Рассылка",
+        callback_data=TenantAdminAction(action="broadcast").pack(),
+    )
+    markup.adjust(1)
+    return markup.as_markup()
+
+
+def subscription_keyboard(channel_link: str):
+    markup = InlineKeyboardBuilder()
+    markup.button(text="📢 Перейти в канал", url=channel_link)
+    markup.button(
+        text="✅ Проверить подписку",
+        callback_data=CHECK_SUBSCRIPTION_CALLBACK,
+    )
     markup.adjust(1)
     return markup.as_markup()
 
